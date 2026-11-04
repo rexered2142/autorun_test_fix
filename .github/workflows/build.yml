@@ -1,0 +1,32 @@
+name: Build Autorun
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift \
+            /usr/local/.ghcup /usr/local/share/powershell
+          sudo apt-get clean
+          sudo docker image prune --all --force
+          df -h /
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y git python3 make bison curl xz-utils
+
+      - name: Build
+        run: sh build.sh --jobs 4
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: autorun
+          path: horizon-wine/build-autorun/autorun-*.zip
+          if-no-files-found: error
