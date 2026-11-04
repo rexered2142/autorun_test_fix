@@ -23,7 +23,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y git python3 make bison curl xz-utils
 
       - name: Build
-        run: sh build.sh --jobs 4
+        run: |
+          git config --global --add safe.directory '*'
+          sudo -H git config --global --add safe.directory '*'
+          sudo chown -R root:root "$GITHUB_WORKSPACE"
+          sudo -H sh build.sh --jobs 4
 
       - uses: actions/upload-artifact@v4
         with:
