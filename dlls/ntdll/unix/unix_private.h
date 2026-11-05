@@ -131,6 +131,10 @@ struct thread_data
     void        *start;             /* thread entry point */
     void        *param;             /* thread entry point parameter */
     struct list  entry;             /* entry in TEB list */
+#ifdef __SWITCH__
+    int          wait_context_valid; /* wait_context holds the registers of a blocking wait */
+    CONTEXT      wait_context;       /* saved before the thread blocks, for a suspend that finds it waiting */
+#endif
     char         debug_info[0x800]; /* debug_info structure */
     char         signal_stack[];    /* signal stack */
     /* char kernel_stack[] */
