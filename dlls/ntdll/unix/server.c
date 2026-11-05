@@ -966,6 +966,13 @@ unsigned int server_wait( const union select_op *select_op, data_size_t size, UI
 #endif
     if (ret == STATUS_USER_APC) return invoke_user_apc( NULL, &apc, ret );
 
+    /* A test on Windows 2000 shows that Windows always yields during
+       a wait, but a wait that is hit by an event gets a priority
+       boost as well.  This seems to model that behavior the closest.  */
+    if (ret == STATUS_TIMEOUT) NtYieldExecution();
+    return ret;
+}
+
 
 /* helper function to perform a server-side wait on an internal handle without
  * using the fast synchronization path */
