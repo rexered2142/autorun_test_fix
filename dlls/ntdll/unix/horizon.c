@@ -12050,6 +12050,8 @@ static void horizon_server_merge_context( struct context_data *dst, const struct
     dst->flags |= flags;
 }
 
+static unsigned int horizon_getctx_traces;
+
 static int horizon_server_handle_get_thread_context( struct horizon_server_connection *connection,
                                                      const unsigned char *message )
 {
@@ -12058,6 +12060,7 @@ static int horizon_server_handle_get_thread_context( struct horizon_server_conne
     struct horizon_server_object *object;
     struct context_data context;
     unsigned int status, i;
+    unsigned int why = 0, tid = 0, nctx = 0, have[4] = {0};
     int found = 0;
 
     memset( &reply, 0, sizeof(reply) );
@@ -12066,7 +12069,12 @@ static int horizon_server_handle_get_thread_context( struct horizon_server_conne
     {
         if (object == connection->thread) reply.self = 1;
         else if (!object->thread.suspend) status = HORIZON_STATUS_INVALID_PARAMETER;
-        else if (!object->thread.started) status = HORIZON_STATUS_NOT_SUPPORTED;
+        else if (!object->thread.started)
+        {
+            status = HORIZON_STATUS_NOT_SUPPORTED;
+            why = 1;
+            tid = object->thread.tid;
+        }
         else
         {
             while (!object->thread_context_valid && object->thread.suspend &&
@@ -12085,10 +12093,21 @@ static int horizon_server_handle_get_thread_context( struct horizon_server_conne
                 found = 1;
                 break;
             }
-            if (!found && !status) status = HORIZON_STATUS_NOT_SUPPORTED;
+            if (!found && !status)
+            {
+                status = HORIZON_STATUS_NOT_SUPPORTED;
+                why = 2;
+                tid = object->thread.tid;
+                nctx = object->thread_context_count;
+                for (i = 0; i < nctx && i < 4; i++) have[i] = object->thread_contexts[i].machine;
+            }
         }
     }
     pthread_mutex_unlock( &horizon_server_objects_mutex );
+    if (why && horizon_getctx_traces++ < 8)
+        horizon_trace( "[GETCTX] refused why=%u tid=%u asked machine=%x flags=%x native=%x have=%u: %x %x %x %x\n",
+                       why, tid, (unsigned int)request->machine, (unsigned int)request->flags,
+                       (unsigned int)request->native_flags, nctx, have[0], have[1], have[2], have[3] );
     reply.header.error = status;
     if (!status && found) reply.header.reply_size = sizeof(context);
     return horizon_server_write_reply( connection->reply_fd, &reply, sizeof(reply),
