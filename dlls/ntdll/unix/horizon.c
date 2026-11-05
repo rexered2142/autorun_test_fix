@@ -16391,6 +16391,10 @@ static unsigned int horizon_server_async_apc_locked( struct horizon_server_conne
     return async->apc_id;
 }
 
+#ifndef HORIZON_STANDALONE_SYNTAX
+extern unsigned int horizon_wait_contexts( TEB *teb, struct context_data server_contexts[2] );
+#endif
+
 static int horizon_server_handle_select( struct horizon_server_connection *connection,
                                          const unsigned char *message,
                                          const unsigned char *data, unsigned int data_size )
