@@ -16455,11 +16455,16 @@ static int horizon_server_handle_select( struct horizon_server_connection *conne
 
             if (!thread->thread_context_valid)
             {
+                unsigned int published = suspend_context_count;
+
                 thread->thread_contexts = suspend_reply.contexts;
-                thread->thread_context_count = suspend_context_count;
                 if (suspend_context_count)
                     memcpy( thread->thread_contexts, suspend_contexts,
                             suspend_context_count * sizeof(*suspend_contexts) );
+                else
+                    published = horizon_wait_contexts( (TEB *)(ULONG_PTR)thread->thread.teb,
+                                                       suspend_reply.contexts );
+                thread->thread_context_count = published;
                 thread->thread_context_valid = 1;
                 horizon_server_signal_changed_locked();
             }
