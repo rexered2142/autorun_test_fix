@@ -929,12 +929,19 @@ unsigned int server_select( const union select_op *select_op, data_size_t size, 
 /***********************************************************************
  *              server_wait
  */
+#ifdef __SWITCH__
+extern int horizon_capture_context( CONTEXT *context );
+#endif
+
 unsigned int server_wait( const union select_op *select_op, data_size_t size, UINT flags,
                           const LARGE_INTEGER *timeout )
 {
     timeout_t abs_timeout = timeout ? timeout->QuadPart : TIMEOUT_INFINITE;
     unsigned int ret;
     struct user_apc apc;
+#ifdef __SWITCH__
+    struct thread_data *wait_data = NULL;
+#endif
 
     if (abs_timeout < 0)
     {
@@ -944,15 +951,20 @@ unsigned int server_wait( const union select_op *select_op, data_size_t size, UI
         abs_timeout -= now.QuadPart;
     }
 
+#ifdef __SWITCH__
+    /* A suspend that finds this thread blocked below has no signal to take its
+     * registers with, so it reads the ones saved here. */
+    if (abs_timeout && is_arm64ec() && (wait_data = get_thread_data()))
+    {
+        horizon_capture_context( &wait_data->wait_context );
+        __atomic_store_n( &wait_data->wait_context_valid, 1, __ATOMIC_RELEASE );
+    }
+#endif
     ret = server_select( select_op, size, flags, abs_timeout, NULL, &apc );
+#ifdef __SWITCH__
+    if (wait_data) __atomic_store_n( &wait_data->wait_context_valid, 0, __ATOMIC_RELEASE );
+#endif
     if (ret == STATUS_USER_APC) return invoke_user_apc( NULL, &apc, ret );
-
-    /* A test on Windows 2000 shows that Windows always yields during
-       a wait, but a wait that is hit by an event gets a priority
-       boost as well.  This seems to model that behavior the closest.  */
-    if (ret == STATUS_TIMEOUT) NtYieldExecution();
-    return ret;
-}
 
 
 /* helper function to perform a server-side wait on an internal handle without
