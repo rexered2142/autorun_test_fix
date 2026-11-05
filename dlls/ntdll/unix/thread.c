@@ -1143,6 +1143,23 @@ void horizon_wait_suspend_arm64ec(void)
 }
 #endif
 
+#ifdef __SWITCH__
+/* A thread that a suspend finds blocked in a wait has no signal to take its
+ * registers with: the ones it saved before it blocked stand in for them. */
+unsigned int horizon_wait_contexts( TEB *teb, struct context_data server_contexts[2] )
+{
+    struct thread_data *data = teb ? ((struct teb_data *)&teb->GdiTebBatch)->thread : NULL;
+    CONTEXT context;
+
+    if (!data || !is_arm64ec() || !__atomic_load_n( &data->wait_context_valid, __ATOMIC_ACQUIRE ))
+        return 0;
+    context = data->wait_context;
+    context.ContextFlags = CONTEXT_ARM64_FULL;
+    contexts_to_server( server_contexts, &context );
+    return server_contexts[1].machine ? 2 : 1;
+}
+#endif
+
 
 /***********************************************************************
  *           pthread_exit_wrapper
