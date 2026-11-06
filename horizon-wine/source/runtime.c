@@ -3401,6 +3401,8 @@ static void tls_placeholder( void *arg )
     waitSingle( waiterForUEvent( &tls_released ), UINT64_MAX );
 }
 
+static void release_thread_local_pages( void );
+
 static void hold_thread_local_pages( void )
 {
     extern unsigned int horizon_drop_thread_local_pages( unsigned int *found );
@@ -3446,6 +3448,8 @@ static void hold_thread_local_pages( void )
     log_line( "[TLS] %u placeholder threads (the next refused: rc=%#x), %u kept to hold a thread-local page "
               "each; of %u such pages below 4 GB, %u were inside the program's reserved memory and were taken "
               "out of it", tls_count, rc, kept, found, dropped );
+    /* EXPERIMENT: no thread-local page below 4 GB means nothing to hold. */
+    if (!found) release_thread_local_pages();
 }
 
 /* Before the loader takes the process back: the placeholders' stacks are on
