@@ -11963,6 +11963,8 @@ static int horizon_server_handle_new_thread( struct horizon_server_connection *c
     return horizon_server_write_reply( connection->reply_fd, &reply, sizeof(reply), NULL, 0 );
 }
 
+static unsigned int horizon_susp_traces;
+
 static int horizon_server_handle_resume_thread( struct horizon_server_connection *connection,
                                                 const unsigned char *message )
 {
@@ -11976,6 +11978,9 @@ static int horizon_server_handle_resume_thread( struct horizon_server_connection
     if ((object = horizon_server_get_thread_locked( request->handle, &status )))
     {
         status = horizon_thread_resume( &object->thread, &reply.count );
+        if (!status && horizon_susp_traces++ < 600)
+            horizon_trace( "[RESUME] tid=%u by tid=%u was=%u\n",
+                           (unsigned int)object->thread.tid, connection->tid, reply.count );
 #ifndef HORIZON_STANDALONE_SYNTAX
         if (!status && reply.count == 1)
             horizon_server_set_suspend_doorbell_locked( object, 0 );
@@ -12000,6 +12005,9 @@ static int horizon_server_handle_suspend_thread( struct horizon_server_connectio
     if ((object = horizon_server_get_thread_locked( request->handle, &status )))
     {
         status = horizon_thread_suspend( &object->thread, &reply.count );
+        if (!status && horizon_susp_traces++ < 600)
+            horizon_trace( "[SUSPEND] tid=%u by tid=%u was=%u\n",
+                           (unsigned int)object->thread.tid, connection->tid, reply.count );
 #ifndef HORIZON_STANDALONE_SYNTAX
         if (!status && object->thread.started && !reply.count)
             horizon_server_set_suspend_doorbell_locked( object, 1 );
