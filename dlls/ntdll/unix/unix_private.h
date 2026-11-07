@@ -483,6 +483,27 @@ static inline struct syscall_frame *get_syscall_frame( struct thread_data *data 
     return data->teb ? get_teb_data(data)->syscall_frame : NULL;
 }
 
+#ifdef __SWITCH__
+extern int horizon_capture_context( CONTEXT *context );
+
+/* A thread that blocks where the server cannot see it has no signal to take its
+ * registers with: it saves them before it blocks, for a suspend that finds it there. */
+static inline __attribute__((always_inline)) struct thread_data *horizon_wait_context_begin( void )
+{
+    struct thread_data *data;
+
+    if (!is_arm64ec() || !(data = get_thread_data())) return NULL;
+    horizon_capture_context( &data->wait_context );
+    __atomic_store_n( &data->wait_context_valid, 1, __ATOMIC_RELEASE );
+    return data;
+}
+
+static inline void horizon_wait_context_end( struct thread_data *data )
+{
+    if (data) __atomic_store_n( &data->wait_context_valid, 0, __ATOMIC_RELEASE );
+}
+#endif
+
 static inline void alloc_syscall_frame( SIZE_T frame_size )
 {
     struct thread_data *data = get_thread_data();
