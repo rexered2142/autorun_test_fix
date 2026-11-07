@@ -3703,6 +3703,9 @@ NTSTATUS WINAPI NtWaitForAlertByThreadId( const void *address, const LARGE_INTEG
         LONG *futex = &entry->futex;
         ULONGLONG end;
         int ret;
+#ifdef __SWITCH__
+        struct thread_data *wait_data;
+#endif
 
         if (timeout)
         {
@@ -3712,6 +3715,10 @@ NTSTATUS WINAPI NtWaitForAlertByThreadId( const void *address, const LARGE_INTEG
                 end = get_absolute_timeout( timeout );
         }
 
+#ifdef __SWITCH__
+        if (InterlockedExchange( futex, 0 )) return STATUS_ALERTED;
+        wait_data = horizon_wait_context_begin();
+#endif
         while (!InterlockedExchange( futex, 0 ))
         {
             if (timeout)
@@ -3726,8 +3733,17 @@ NTSTATUS WINAPI NtWaitForAlertByThreadId( const void *address, const LARGE_INTEG
             else
                 ret = futex_wait( futex, 0, NULL );
 
-            if (ret == -1 && errno == ETIMEDOUT) return STATUS_TIMEOUT;
+            if (ret == -1 && errno == ETIMEDOUT)
+            {
+#ifdef __SWITCH__
+                horizon_wait_context_end( wait_data );
+#endif
+                return STATUS_TIMEOUT;
+            }
         }
+#ifdef __SWITCH__
+        horizon_wait_context_end( wait_data );
+#endif
         return STATUS_ALERTED;
     }
 #elif defined(HAVE_KQUEUE)
