@@ -3449,7 +3449,11 @@ static void hold_thread_local_pages( void )
               "each; of %u such pages below 4 GB, %u were inside the program's reserved memory and were taken "
               "out of it", tls_count, rc, kept, found, dropped );
     /* EXPERIMENT: no thread-local page below 4 GB means nothing to hold. */
-    if (!found) release_thread_local_pages();
+    if (!found)
+    {
+        release_thread_local_pages();
+        log_line( "[TLS] no page below 4 GB: %u held threads released", kept );
+    }
 }
 
 /* Before the loader takes the process back: the placeholders' stacks are on
