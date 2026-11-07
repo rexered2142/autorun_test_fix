@@ -3825,9 +3825,15 @@ static NTSTATUS keyed_event_rendezvous( HANDLE handle, const void *key, BOOL rel
         LONGLONG left = timeout->QuadPart <= 0 ? -timeout->QuadPart : update_timeout( timeout->QuadPart );
         timeout_ns = left * 100;
     }
-    return horizon_keyed_rendezvous( &keyed_event_lock, &keyed_event_queue, &self, timeout_ns,
-                                     keyed_event_now_ns, horizon_futex_wait, horizon_futex_wake )
-           ? STATUS_TIMEOUT : STATUS_SUCCESS;
+    {
+        struct thread_data *wait_data = horizon_wait_context_begin();
+        NTSTATUS status = horizon_keyed_rendezvous( &keyed_event_lock, &keyed_event_queue, &self, timeout_ns,
+                                                    keyed_event_now_ns, horizon_futex_wait, horizon_futex_wake )
+                          ? STATUS_TIMEOUT : STATUS_SUCCESS;
+
+        horizon_wait_context_end( wait_data );
+        return status;
+    }
 }
 #endif
 
