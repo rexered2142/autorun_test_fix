@@ -12058,6 +12058,8 @@ static void horizon_server_merge_context( struct context_data *dst, const struct
     dst->flags |= flags;
 }
 
+extern unsigned int horizon_wait_contexts( TEB *teb, struct context_data server_contexts[2] );
+
 static unsigned int horizon_getctx_traces;
 
 static int horizon_server_handle_get_thread_context( struct horizon_server_connection *connection,
@@ -12066,9 +12068,10 @@ static int horizon_server_handle_get_thread_context( struct horizon_server_conne
     const struct horizon_get_thread_context_request *request = (const void *)message;
     struct horizon_get_thread_context_reply reply;
     struct horizon_server_object *object;
-    struct context_data context;
-    unsigned int status, i;
-    unsigned int why = 0, tid = 0, nctx = 0, have[4] = {0};
+    struct context_data context, waiting[2];
+    const struct context_data *list;
+    unsigned int status, i, count;
+    unsigned int why = 0, tid = 0, have[4] = {0};
     int found = 0;
 
     memset( &reply, 0, sizeof(reply) );
@@ -12085,18 +12088,27 @@ static int horizon_server_handle_get_thread_context( struct horizon_server_conne
         }
         else
         {
-            while (!object->thread_context_valid && object->thread.suspend &&
-                   !object->thread.terminated)
+            /* A thread blocked where the server cannot reach it saved its registers before it blocked. */
+            if (!object->thread_context_valid &&
+                (count = horizon_wait_contexts( (TEB *)(ULONG_PTR)object->thread.teb, waiting )))
+                list = waiting;
+            else
             {
-                horizon_server_sleep_locked( HORIZON_SERVER_WAIT_SLICE );
-                horizon_server_quit_check_locked();
+                while (!object->thread_context_valid && object->thread.suspend &&
+                       !object->thread.terminated)
+                {
+                    horizon_server_sleep_locked( HORIZON_SERVER_WAIT_SLICE );
+                    horizon_server_quit_check_locked();
+                }
+                list = object->thread_contexts;
+                count = object->thread_context_count;
             }
             if (object->thread.terminated) status = HORIZON_STATUS_ACCESS_DENIED;
             else if (!object->thread.suspend) status = HORIZON_STATUS_UNSUCCESSFUL;
-            else for (i = 0; i < object->thread_context_count; i++)
+            else for (i = 0; i < count; i++)
             {
-                if (object->thread_contexts[i].machine != request->machine) continue;
-                context = object->thread_contexts[i];
+                if (list[i].machine != request->machine) continue;
+                context = list[i];
                 context.flags &= request->flags | request->native_flags | SERVER_CTX_EXEC_SPACE;
                 found = 1;
                 break;
@@ -12106,16 +12118,15 @@ static int horizon_server_handle_get_thread_context( struct horizon_server_conne
                 status = HORIZON_STATUS_NOT_SUPPORTED;
                 why = 2;
                 tid = object->thread.tid;
-                nctx = object->thread_context_count;
-                for (i = 0; i < nctx && i < 4; i++) have[i] = object->thread_contexts[i].machine;
+                for (i = 0; i < count && i < 4; i++) have[i] = list[i].machine;
             }
         }
     }
     pthread_mutex_unlock( &horizon_server_objects_mutex );
     if (why && horizon_getctx_traces++ < 8)
-        horizon_trace( "[GETCTX] refused why=%u tid=%u asked machine=%x flags=%x native=%x have=%u: %x %x %x %x\n",
+        horizon_trace( "[GETCTX] refused why=%u tid=%u asked machine=%x flags=%x native=%x have: %x %x %x %x\n",
                        why, tid, (unsigned int)request->machine, (unsigned int)request->flags,
-                       (unsigned int)request->native_flags, nctx, have[0], have[1], have[2], have[3] );
+                       (unsigned int)request->native_flags, have[0], have[1], have[2], have[3] );
     reply.header.error = status;
     if (!status && found) reply.header.reply_size = sizeof(context);
     return horizon_server_write_reply( connection->reply_fd, &reply, sizeof(reply),
