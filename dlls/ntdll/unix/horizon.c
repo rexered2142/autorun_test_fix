@@ -16414,6 +16414,39 @@ static unsigned int horizon_server_async_apc_locked( struct horizon_server_conne
 extern unsigned int horizon_wait_contexts( TEB *teb, struct context_data server_contexts[2] );
 #endif
 
+static unsigned int horizon_long_waits;
+
+static void horizon_log_long_wait_locked( const struct horizon_server_connection *connection,
+                                          const struct horizon_select_request *request,
+                                          const unsigned char *data, unsigned int data_size )
+{
+    const struct horizon_select_wait_op *op;
+    const unsigned char *select_data = data;
+    char line[512];
+    unsigned int i, count, len;
+
+    if (horizon_long_waits++ >= 40 || !request->size || data_size < request->size) return;
+    if (data_size >= HORIZON_APC_RESULT_SIZE + request->size) select_data += HORIZON_APC_RESULT_SIZE;
+    op = (const void *)select_data;
+    len = snprintf( line, sizeof(line), "[LONGWAIT] tid=%u flags=%x timeout=%lld size=%u op=%d handles:",
+                    connection->tid, (unsigned int)request->flags, request->timeout, request->size, op->op );
+    if (request->size >= offsetof( struct horizon_select_wait_op, handles[1] ))
+    {
+        count = (request->size - offsetof( struct horizon_select_wait_op, handles )) / sizeof(op->handles[0]);
+        for (i = 0; i < count && i < 8 && len + 64 < sizeof(line); i++)
+        {
+            struct horizon_server_handle_entry *entry = horizon_server_find_handle_locked( op->handles[i] );
+
+            len += snprintf( line + len, sizeof(line) - len, " %08x:type=%d", op->handles[i],
+                             entry ? (int)entry->object->type : -1 );
+            if (entry && entry->object->type == HORIZON_SERVER_OBJECT_THREAD)
+                len += snprintf( line + len, sizeof(line) - len, ":tid=%u",
+                                 (unsigned int)entry->object->thread.tid );
+        }
+    }
+    wine_nx_runtime_trace( line );
+}
+
 static int horizon_server_handle_select( struct horizon_server_connection *connection,
                                          const unsigned char *message,
                                          const unsigned char *data, unsigned int data_size )
@@ -16426,6 +16459,8 @@ static int horizon_server_handle_select( struct horizon_server_connection *conne
     struct horizon_sync_waiter waiter = { .connection = connection, .request = request,
         .data = data, .data_size = data_size, .cond = PTHREAD_COND_INITIALIZER, .links = links };
     int polls, signals, ret, queued = -1;
+    long long wait_start = 0;
+    int wait_logged = 0;
 #ifndef HORIZON_STANDALONE_SYNTAX
     struct
     {
@@ -16566,6 +16601,19 @@ static int horizon_server_handle_select( struct horizon_server_connection *conne
                 if (now.QuadPart >= request->timeout) break;
                 timeout = request->timeout - now.QuadPart;
             }
+        }
+        if (connection->tid == 4 && !wait_logged)
+        {
+            LARGE_INTEGER t;
+
+            NtQueryPerformanceCounter( &t, NULL );
+            if (!wait_start) wait_start = t.QuadPart;
+            else if (t.QuadPart - wait_start > 200000000LL)
+            {
+                horizon_log_long_wait_locked( connection, request, data, data_size );
+                wait_logged = 1;
+            }
+            if (timeout > 150000000LL) timeout = 150000000LL;
         }
         if (connection->direct_reply && queued < 0)
             queued = horizon_sync_queue_locked( &waiter );
