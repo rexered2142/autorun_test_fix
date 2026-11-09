@@ -12259,13 +12259,14 @@ static int horizon_server_handle_get_thread_info( struct horizon_server_connecti
     pthread_mutex_unlock( &horizon_server_objects_mutex );
     if (status)
     {
-        static unsigned int failures;
-        char line[96];
+        static unsigned int calls, failures;
 
-        if (failures++ < 8)
+        if (calls++ < 3 || (status && failures++ < 8))
         {
-            snprintf( line, sizeof(line), "[THREADINFO] get_thread_info handle=%08x status=%08x",
-                      request->handle, status );
+            char line[110];
+
+            snprintf( line, sizeof(line), "[THREADINFO] call=%u handle=%08x status=%08x",
+                      calls, request->handle, status );
             wine_nx_runtime_trace( line );
         }
     }
@@ -12381,6 +12382,19 @@ static int horizon_server_handle_get_next_thread( struct horizon_server_connecti
     for (object = horizon_server_threads; object; object = object->thread_next)
     {
         if (object->thread.pid != connection->pid || object->thread.is_system) continue;
+        if (object->thread.terminated)
+        {
+            static unsigned int skipped;
+            char line[96];
+
+            if (skipped++ < 8)
+            {
+                snprintf( line, sizeof(line), "[NEXTTHREAD] skipped an ended thread tid=%u",
+                          (unsigned int)object->thread.tid );
+                wine_nx_runtime_trace( line );
+            }
+            continue;
+        }
         if (request->flags ? object->thread.tid >= last : object->thread.tid <= last) continue;
         if (!next || (request->flags ? object->thread.tid > next->thread.tid :
                                       object->thread.tid < next->thread.tid)) next = object;
