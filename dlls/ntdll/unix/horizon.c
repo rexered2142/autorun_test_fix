@@ -12257,6 +12257,18 @@ static int horizon_server_handle_get_thread_info( struct horizon_server_connecti
         reply.flags = horizon_thread_info_flags( thread, horizon_server_running_threads );
     }
     pthread_mutex_unlock( &horizon_server_objects_mutex );
+    if (status)
+    {
+        static unsigned int failures;
+        char line[96];
+
+        if (failures++ < 8)
+        {
+            snprintf( line, sizeof(line), "[THREADINFO] get_thread_info handle=%08x status=%08x",
+                      request->handle, status );
+            wine_nx_runtime_trace( line );
+        }
+    }
     reply.header.error = status;
     return horizon_server_write_reply( connection->reply_fd, &reply, sizeof(reply), NULL, 0 );
 }
