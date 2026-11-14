@@ -3451,8 +3451,14 @@ static void hold_thread_local_pages( void )
     /* EXPERIMENT: no thread-local page below 4 GB means nothing to hold. */
     if (!found)
     {
-        release_thread_local_pages();
-        log_line( "[TLS] no page below 4 GB: %u held threads released", kept );
+        FILE *keep = fopen( "sdmc:/switch/wine/keep-tls.txt", "r" );
+
+        if (keep) fclose( keep );
+        else
+        {
+            release_thread_local_pages();
+            log_line( "[TLS] no page below 4 GB: %u held threads released", kept );
+        }
     }
 }
 
