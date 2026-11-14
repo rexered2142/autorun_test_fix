@@ -486,6 +486,8 @@ static inline struct syscall_frame *get_syscall_frame( struct thread_data *data 
 #ifdef __SWITCH__
 extern int horizon_capture_context( CONTEXT *context );
 
+extern int horizon_wait_context_enabled( void );
+
 /* A thread that blocks where the server cannot see it has no signal to take its
  * registers with: it saves them before it blocks, for a suspend that finds it there. */
 static inline __attribute__((always_inline)) struct thread_data *horizon_wait_context_begin( void )
