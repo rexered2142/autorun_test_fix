@@ -931,6 +931,7 @@ unsigned int server_select( const union select_op *select_op, data_size_t size, 
  */
 #ifdef __SWITCH__
 extern int horizon_capture_context( CONTEXT *context );
+extern int horizon_wait_context_enabled( void );
 #endif
 
 unsigned int server_wait( const union select_op *select_op, data_size_t size, UINT flags,
@@ -954,7 +955,7 @@ unsigned int server_wait( const union select_op *select_op, data_size_t size, UI
 #ifdef __SWITCH__
     /* A suspend that finds this thread blocked below has no signal to take its
      * registers with, so it reads the ones saved here. */
-    if (abs_timeout && is_arm64ec() && (wait_data = get_thread_data()))
+    if (abs_timeout && horizon_wait_context_enabled() && is_arm64ec() && (wait_data = get_thread_data()))
     {
         horizon_capture_context( &wait_data->wait_context );
         __atomic_store_n( &wait_data->wait_context_valid, 1, __ATOMIC_RELEASE );
