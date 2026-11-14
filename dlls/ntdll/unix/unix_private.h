@@ -494,7 +494,7 @@ static inline __attribute__((always_inline)) struct thread_data *horizon_wait_co
 {
     struct thread_data *data;
 
-    if (!is_arm64ec() || !(data = get_thread_data())) return NULL;
+    if (!horizon_wait_context_enabled() || !is_arm64ec() || !(data = get_thread_data())) return NULL;
     horizon_capture_context( &data->wait_context );
     __atomic_store_n( &data->wait_context_valid, 1, __ATOMIC_RELEASE );
     return data;
