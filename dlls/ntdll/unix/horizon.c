@@ -12058,6 +12058,20 @@ static void horizon_server_merge_context( struct context_data *dst, const struct
     dst->flags |= flags;
 }
 
+int horizon_wait_context_enabled( void )
+{
+    static int state;   /* 0 not read yet, 1 on, -1 off */
+
+    if (!state)
+    {
+        FILE *off = fopen( "sdmc:/switch/wine/no-waitctx.txt", "r" );
+
+        if (off) { fclose( off ); state = -1; }
+        else state = 1;
+    }
+    return state > 0;
+}
+
 extern unsigned int horizon_wait_contexts( TEB *teb, struct context_data server_contexts[2] );
 
 static unsigned int horizon_getctx_traces;
